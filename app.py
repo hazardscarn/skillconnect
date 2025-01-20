@@ -1,221 +1,289 @@
 import streamlit as st
 import pandas as pd
 from resume_search import search_resumes
+from resume_analysis_agent import ResumeAnalysisAgent
 import os
 from pathlib import Path
-import plotly.express as px
-from jdanalysisagent import JDAnalysisAgent
-from resumematcher import SemanticMatcher
-import zipfile
-import io
 
 # Page configuration
 st.set_page_config(
-    page_title="Smart Resume Search",
-    page_icon="🔍",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Resume Analysis System",
+    page_icon="📊",
+    layout="wide"
 )
 
 # Custom CSS
 st.markdown("""
     <style>
-    .requirement-tag {
-        display: inline-block;
-        padding: 8px 12px;
-        margin: 4px;
-        border-radius: 20px;
-        font-size: 0.9em;
-        font-weight: 500;
-        color: white;
-    }
-    .requirements-header {
-        font-size: 1.2em;
-        font-weight: 600;
-        margin-bottom: 10px;
-    }
-    .requirements-container {
+    .score-card {
         background-color: white;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin: 20px 0;
-    }
-    .search-results {
-        background-color: white;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin-bottom: 20px;
-    }
-    .resume-content {
-        font-family: 'Source Sans Pro', sans-serif;
-        line-height: 1.6;
         padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin: 10px 0;
+    }
+    .score-label {
+        font-size: 0.9em;
+        color: #666;
+        margin-bottom: 5px;
+    }
+    .score-value {
+        font-size: 1.2em;
+        font-weight: bold;
+        color: #1f77b4;
+    }
+    .total-score {
+        font-size: 1.5em;
+        font-weight: bold;
+        color: #2ecc71;
+    }
+    .explanation {
+        font-size: 0.9em;
+        color: #333;
+        margin-top: 10px;
+        padding: 10px;
         background-color: #f8f9fa;
         border-radius: 5px;
     }
-    .match-confidence {
-        display: inline-block;
-        padding: 2px 6px;
-        border-radius: 10px;
-        font-size: 0.8em;
-        margin-left: 8px;
+    .score-breakdown {
+        margin-top: 10px;
+        padding: 10px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+    .stProgress > div > div > div > div {
+        background-color: #2ecc71;
     }
     </style>
 """, unsafe_allow_html=True)
 
-def create_zip_file(file_paths: list) -> bytes:
-    """Create a zip file containing multiple PDFs"""
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        for file_path in file_paths:
-            if os.path.exists(file_path):
-                zip_file.write(file_path, os.path.basename(file_path))
-    return zip_buffer.getvalue()
-
-def get_pdf_download_link(file_path: str, display_name: str) -> bytes:
-    """Create a download link for a PDF file"""
-    try:
-        with open(file_path, 'rb') as file:
-            return file.read()
-    except Exception as e:
-        st.error(f"Error reading file {display_name}: {str(e)}")
-        return None
-
-def get_profession_types():
-    """Get list of profession types from data directory"""
-    data_dir = Path("data")
-    return [d.name for d in data_dir.iterdir() if d.is_dir()]
-
 @st.cache_resource
-def get_agents():
-    """Initialize and cache the analysis agents"""
-    return JDAnalysisAgent(), SemanticMatcher()
+def initialize_agent():
+    """Initialize and cache the analysis agent"""
+    return ResumeAnalysisAgent()
 
-def display_requirements(requirements: dict):
-    """Display identified requirements with their respective colors"""
-    st.markdown('<div class="requirements-container">', unsafe_allow_html=True)
-    st.markdown('### 🎯 Key Requirements Identified')
+def create_summary_table(analyzed_results):
+    """Create summary DataFrame for displaying results"""
+    summary_data = []
+    for result in analyzed_results:
+        summary_data.append({
+            'Resume': result['file_name'],
+            'Total Score': f"{result['total_score']:.1f}%",
+            'Education': f"{result['component_scores']['education']['score']:.1f}%",
+            'Skills': f"{result['component_scores']['skills']['score']:.1f}%",
+            'Experience': f"{result['component_scores']['experience']['score']:.1f}%",
+            'Initial Match': f"{result['similarity']:.1%}"
+        })
     
-    for req in requirements["requirements"]:
-        st.markdown(
-            f'<div class="requirement-tag" style="background-color: {req["color"]};">'
-            f'{req["responsibility"]}</div>',
-            unsafe_allow_html=True
-        )
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+    return pd.DataFrame(summary_data)
 
-def display_resume_content(resume_content: str, requirements: dict, matcher: SemanticMatcher):
-    """Display resume content with semantic highlighting"""
-    with st.expander("View Resume Content", expanded=True):
-        highlighted_content = matcher.find_matches(resume_content, requirements)
-        st.markdown(
-            f'<div class="resume-content">{highlighted_content}</div>',
-            unsafe_allow_html=True
-        )
+def display_component_details(details, component_name):
+    """Display detailed breakdown of a component's scores"""
+    # Display explanation
+    if 'explanation' in details:
+        st.markdown("#### Analysis")
+        st.markdown(f"""
+            <div class="explanation">
+                {details['explanation']}
+            </div>
+        """, unsafe_allow_html=True)
+    
+    # Display score breakdown
+    st.markdown("#### Score Breakdown")
+    for key, value in details.items():
+        if key != 'explanation' and isinstance(value, (int, float)):
+            st.markdown(f"""
+                <div class="score-breakdown">
+                    <b>{key.replace('_', ' ').title()}:</b> {value:.1f}%
+                </div>
+            """, unsafe_allow_html=True)
+
+def display_detailed_results(analyzed_results):
+    """Display detailed analysis for each resume"""
+    for idx, result in enumerate(analyzed_results, 1):
+        with st.expander(f"📄 Resume #{idx}: {result['file_name']}", expanded=idx==1):
+            # Display total score
+            st.markdown(f"""
+                <div class="score-card">
+                    <div class="score-label">Total Score</div>
+                    <div class="total-score">{result['total_score']:.1f}%</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            # Display component scores and details
+            cols = st.columns(3)
+            
+            # Education
+            with cols[0]:
+                education = result['component_scores']['education']
+                st.markdown(f"""
+                    <div class="score-card">
+                        <div class="score-label">Education Score</div>
+                        <div class="score-value">{education['score']:.1f}%</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                display_component_details(education['details'], "Education")
+            
+            # Skills
+            with cols[1]:
+                skills = result['component_scores']['skills']
+                st.markdown(f"""
+                    <div class="score-card">
+                        <div class="score-label">Skills Score</div>
+                        <div class="score-value">{skills['score']:.1f}%</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                display_component_details(skills['details'], "Skills")
+            
+            # Experience
+            with cols[2]:
+                experience = result['component_scores']['experience']
+                st.markdown(f"""
+                    <div class="score-card">
+                        <div class="score-label">Experience Score</div>
+                        <div class="score-value">{experience['score']:.1f}%</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                display_component_details(experience['details'], "Experience")
+            
+            # Add download button for resume
+            if os.path.exists(result['file_path']):
+                with open(result['file_path'], 'rb') as file:
+                    st.download_button(
+                        "📥 Download Resume",
+                        file,
+                        result['file_name'],
+                        "application/pdf",
+                        key=f"download_{idx}"
+                    )
 
 def main():
-    # Initialize agents
-    jd_agent, semantic_matcher = get_agents()
-    
-    # Header
-    st.title("🔍 Smart Resume Search Engine")
+    st.title("📊 Resume Analysis System")
     st.markdown("---")
     
-    # Main search interface
-    search_query = st.text_area(
+    # Initialize analysis agent
+    try:
+        analysis_agent = initialize_agent()
+    except Exception as e:
+        st.error(f"Error initializing analysis agent: {str(e)}")
+        return
+    
+    # Job Description Input
+    job_description = st.text_area(
         "Enter Job Description",
         height=150,
-        placeholder="Paste the job description here..."
+        help="Paste the complete job description here"
     )
     
-    col1, col2, col3 = st.columns([1, 1, 1])
+    # Search Parameters
+    col1, col2, col3 = st.columns(3)
+    
     with col1:
-        profession_types = get_profession_types()
+        # Get profession types from data directory
+        try:
+            profession_types = ["All Professions"] + [
+                d.name for d in Path("data").iterdir() if d.is_dir()
+            ]
+        except Exception as e:
+            st.error(f"Error loading profession types: {str(e)}")
+            profession_types = ["All Professions"]
+            
         selected_profession = st.selectbox(
             "Select Profession",
-            ["All Professions"] + profession_types
+            profession_types
         )
+    
     with col2:
         threshold = st.slider(
-            "Match Threshold",
+            "Minimum Match Score",
             min_value=0.0,
             max_value=1.0,
-            value=0.3
+            value=0.2,
+            help="Set minimum similarity threshold for initial matching"
         )
+    
     with col3:
         max_results = st.slider(
             "Maximum Results",
             min_value=1,
             max_value=20,
-            value=5
+            value=5,
+            help="Maximum number of resumes to analyze"
         )
     
-    search_button = st.button("🔍 Search Resumes", type="primary")
-    
-    if search_button and search_query:
-        # Analyze requirements
-        with st.spinner("Analyzing requirements..."):
-            requirements = jd_agent.analyze_jd(search_query)
-            display_requirements(requirements)
-        
-        # Search resumes
-        with st.spinner("Searching resumes..."):
-            profession_filter = None if selected_profession == "All Professions" else selected_profession
-            results = search_resumes(
-                query=search_query,
-                profession_type=profession_filter,
-                match_threshold=threshold,
-                match_count=max_results
-            )
+    if st.button("🔍 Analyze Resumes", type="primary"):
+        if not job_description:
+            st.warning("Please enter a job description")
+            return
             
-            if results:
-                # Create download all button
-                zip_data = create_zip_file([r['file_path'] for r in results])
-                st.download_button(
-                    "📥 Download All Matching Resumes",
-                    data=zip_data,
-                    file_name="matching_resumes.zip",
-                    mime="application/zip"
+        with st.spinner("🔍 Searching for matching resumes..."):
+            try:
+                # Initial resume search
+                results = search_resumes(
+                    query=job_description,
+                    profession_type=None if selected_profession == "All Professions" else selected_profession,
+                    match_threshold=threshold,
+                    match_count=max_results
                 )
                 
+                if not results:
+                    st.warning("No matching resumes found. Try adjusting the search parameters.")
+                    return
+                
+                # Perform detailed analysis
+                analyzed_results = []
+                progress_text = st.empty()
+                progress_bar = st.progress(0)
+                
+                for idx, result in enumerate(results):
+                    progress_text.text(f"Analyzing resume {idx + 1} of {len(results)}...")
+                    
+                    # Analyze resume
+                    analysis = analysis_agent.analyze_resume(
+                        job_description=job_description,
+                        resume_content=result['content']
+                    )
+                    
+                    # Combine results
+                    analyzed_result = {**result, **analysis}
+                    analyzed_results.append(analyzed_result)
+                    
+                    # Update progress
+                    progress_bar.progress((idx + 1) / len(results))
+                
+                progress_text.empty()
+                progress_bar.empty()
+                
+                # Sort results by total score
+                analyzed_results.sort(key=lambda x: x['total_score'], reverse=True)
+                
                 # Display results
-                for i, result in enumerate(results, 1):
-                    st.markdown("---")
-                    with st.container():
-                        st.markdown(f"""
-                        <div class="search-results">
-                            <h3>Match #{i} - {result['similarity']:.1%} Match</h3>
-                            <p><strong>Profession:</strong> {result['profession_type']}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Add download button
-                        pdf_data = get_pdf_download_link(result['file_path'], result['file_name'])
-                        if pdf_data:
-                            st.download_button(
-                                "📄 Download Resume",
-                                data=pdf_data,
-                                file_name=result['file_name'],
-                                mime="application/pdf",
-                                key=f"download_{i}"
-                            )
-                        
-                        # Display resume content with semantic matching
-                        display_resume_content(result['content'], requirements, semantic_matcher)
-            
-            else:
-                st.error("No matching resumes found.")
-    
-    # Footer
-    st.markdown("---")
-    st.markdown("""
-        <div style='text-align: center; color: #666;'>
-            <p>Built with Streamlit • Powered by Google AI • © 2024</p>
-        </div>
-    """, unsafe_allow_html=True)
+                st.markdown("## 📊 Analysis Results")
+                
+                # Create and display summary table
+                summary_df = create_summary_table(analyzed_results)
+                st.dataframe(
+                    summary_df,
+                    hide_index=True,
+                    use_container_width=True
+                )
+                
+                # Add download button for summary
+                st.download_button(
+                    "📥 Download Analysis Summary",
+                    summary_df.to_csv(index=False).encode('utf-8'),
+                    "resume_analysis_summary.csv",
+                    "text/csv",
+                    key="download_summary"
+                )
+                
+                # Display detailed results
+                st.markdown("## 📑 Detailed Analysis")
+                display_detailed_results(analyzed_results)
+                
+            except Exception as e:
+                st.error(f"An error occurred during analysis: {str(e)}")
+                raise
 
 if __name__ == "__main__":
     main()
