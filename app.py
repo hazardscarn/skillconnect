@@ -7,12 +7,12 @@ from pathlib import Path
 
 # Page configuration
 st.set_page_config(
-    page_title="Resume Analysis System",
+    page_title="Enhanced Resume Analysis System",
     page_icon="📊",
     layout="wide"
 )
 
-# Custom CSS
+# Custom CSS with additional styling
 st.markdown("""
     <style>
     .score-card {
@@ -51,6 +51,12 @@ st.markdown("""
         background-color: #f8f9fa;
         border-radius: 5px;
     }
+    .category-header {
+        font-size: 1.1em;
+        font-weight: bold;
+        color: #2c3e50;
+        margin-top: 15px;
+    }
     .stProgress > div > div > div > div {
         background-color: #2ecc71;
     }
@@ -72,6 +78,10 @@ def create_summary_table(analyzed_results):
             'Education': f"{result['component_scores']['education']['score']:.1f}%",
             'Skills': f"{result['component_scores']['skills']['score']:.1f}%",
             'Experience': f"{result['component_scores']['experience']['score']:.1f}%",
+            'Tools': f"{result['component_scores']['tools']['score']:.1f}%",
+            'Industry': f"{result['component_scores']['industry']['score']:.1f}%",
+            'Role': f"{result['component_scores']['role']['score']:.1f}%",
+            'Preferences': f"{result['component_scores']['preferences']['score']:.1f}%",
             'Initial Match': f"{result['similarity']:.1%}"
         })
     
@@ -110,11 +120,12 @@ def display_detailed_results(analyzed_results):
                 </div>
             """, unsafe_allow_html=True)
             
-            # Display component scores and details
-            cols = st.columns(3)
+            # Display all component scores in two rows
+            row1_cols = st.columns(4)
+            row2_cols = st.columns(3)
             
-            # Education
-            with cols[0]:
+            # First row: Education, Skills, Experience, Tools
+            with row1_cols[0]:
                 education = result['component_scores']['education']
                 st.markdown(f"""
                     <div class="score-card">
@@ -124,8 +135,7 @@ def display_detailed_results(analyzed_results):
                 """, unsafe_allow_html=True)
                 display_component_details(education['details'], "Education")
             
-            # Skills
-            with cols[1]:
+            with row1_cols[1]:
                 skills = result['component_scores']['skills']
                 st.markdown(f"""
                     <div class="score-card">
@@ -135,8 +145,7 @@ def display_detailed_results(analyzed_results):
                 """, unsafe_allow_html=True)
                 display_component_details(skills['details'], "Skills")
             
-            # Experience
-            with cols[2]:
+            with row1_cols[2]:
                 experience = result['component_scores']['experience']
                 st.markdown(f"""
                     <div class="score-card">
@@ -145,6 +154,47 @@ def display_detailed_results(analyzed_results):
                     </div>
                 """, unsafe_allow_html=True)
                 display_component_details(experience['details'], "Experience")
+            
+            with row1_cols[3]:
+                tools = result['component_scores']['tools']
+                st.markdown(f"""
+                    <div class="score-card">
+                        <div class="score-label">Tools Score</div>
+                        <div class="score-value">{tools['score']:.1f}%</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                display_component_details(tools['details'], "Tools")
+            
+            # Second row: Industry, Role, Preferences
+            with row2_cols[0]:
+                industry = result['component_scores']['industry']
+                st.markdown(f"""
+                    <div class="score-card">
+                        <div class="score-label">Industry Score</div>
+                        <div class="score-value">{industry['score']:.1f}%</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                display_component_details(industry['details'], "Industry")
+            
+            with row2_cols[1]:
+                role = result['component_scores']['role']
+                st.markdown(f"""
+                    <div class="score-card">
+                        <div class="score-label">Role Score</div>
+                        <div class="score-value">{role['score']:.1f}%</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                display_component_details(role['details'], "Role")
+            
+            with row2_cols[2]:
+                preferences = result['component_scores']['preferences']
+                st.markdown(f"""
+                    <div class="score-card">
+                        <div class="score-label">Preferences Score</div>
+                        <div class="score-value">{preferences['score']:.1f}%</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                display_component_details(preferences['details'], "Preferences")
             
             # Add download button for resume
             if os.path.exists(result['file_path']):
@@ -158,7 +208,7 @@ def display_detailed_results(analyzed_results):
                     )
 
 def main():
-    st.title("📊 Resume Analysis System")
+    st.title("📊 Enhanced Resume Analysis System")
     st.markdown("---")
     
     # Initialize analysis agent
@@ -176,7 +226,7 @@ def main():
     )
     
     # Search Parameters
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         # Get profession types from data directory
@@ -209,6 +259,14 @@ def main():
             max_value=20,
             value=5,
             help="Maximum number of resumes to analyze"
+        )
+    
+    with col4:
+        analysis_depth = st.select_slider(
+            "Analysis Depth",
+            options=["Basic", "Standard", "Detailed"],
+            value="Standard",
+            help="Control the depth of analysis and scoring"
         )
     
     if st.button("🔍 Analyze Resumes", type="primary"):
