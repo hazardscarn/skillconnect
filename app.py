@@ -7,7 +7,7 @@ from pathlib import Path
 
 # Page configuration
 st.set_page_config(
-    page_title="Enhanced Resume Analysis System",
+    page_title="Resume Analysis System",
     page_icon="📊",
     layout="wide"
 )
@@ -63,10 +63,94 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+st.markdown("""
+    <style>
+    .token-info {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+        border: 1px solid #dee2e6;
+    }
+    .cost-breakdown {
+        margin-top: 10px;
+    }
+    .model-cost {
+        background-color: white;
+        padding: 10px 15px;
+        border-radius: 5px;
+        margin: 5px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .model-name {
+        color: #2c3e50;
+        font-weight: 500;
+    }
+    .cost-value {
+        color: #2ecc71;
+        font-weight: bold;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 @st.cache_resource
 def initialize_agent():
     """Initialize and cache the analysis agent"""
     return ResumeAnalysisAgent()
+
+def calculate_cost(input_tokens: int, output_tokens: int, model_pricing: dict) -> float:
+    """Calculate cost for a specific model's pricing"""
+    input_cost = (input_tokens * model_pricing["input"]) / 1_000_000
+    output_cost = (output_tokens * model_pricing["output"]) / 1_000_000
+    return input_cost + output_cost
+
+def display_token_analysis(token_usage):
+    """Display token counts and costs for all models"""
+    MODEL_PRICING = {
+        "gemini-flash-1.5": {"input": 0.075, "output": 0.3},
+        "gemini-pro-1.5": {"input": 3.5, "output": 10.5},
+        "gpt4-O-mini": {"input": 0.15, "output": 0.6},
+        "gpt4-O": {"input": 5.0, "output": 15.0}
+    }
+    
+    input_tokens = token_usage["input_tokens"]
+    output_tokens = token_usage["output_tokens"]
+    
+    st.markdown("""
+        <div class="token-info">
+            <h4>💰 Token Usage & Cost Analysis</h4>
+            <div>Input Tokens: {:,}</div>
+            <div>Output Tokens: {:,}</div>
+            <div class="cost-breakdown">
+                <h5>Cost by Model:</h5>
+                <div class="model-cost">
+                    <span class="model-name">Gemini Flash 1.5</span>
+                    <span class="cost-value">${:.4f}</span>
+                </div>
+                <div class="model-cost">
+                    <span class="model-name">Gemini Pro 1.5</span>
+                    <span class="cost-value">${:.4f}</span>
+                </div>
+                <div class="model-cost">
+                    <span class="model-name">GPT-4 O Mini</span>
+                    <span class="cost-value">${:.4f}</span>
+                </div>
+                <div class="model-cost">
+                    <span class="model-name">GPT-4 O</span>
+                    <span class="cost-value">${:.4f}</span>
+                </div>
+            </div>
+        </div>
+    """.format(
+        input_tokens,
+        output_tokens,
+        calculate_cost(input_tokens, output_tokens, MODEL_PRICING["gemini-flash-1.5"]),
+        calculate_cost(input_tokens, output_tokens, MODEL_PRICING["gemini-pro-1.5"]),
+        calculate_cost(input_tokens, output_tokens, MODEL_PRICING["gpt4-O-mini"]),
+        calculate_cost(input_tokens, output_tokens, MODEL_PRICING["gpt4-O"])
+    ), unsafe_allow_html=True)
 
 def create_summary_table(analyzed_results):
     """Create summary DataFrame for displaying results"""
@@ -314,7 +398,9 @@ def main():
                 
                 # Sort results by total score
                 analyzed_results.sort(key=lambda x: x['total_score'], reverse=True)
-                
+                if analyzed_results:
+                    display_token_analysis(analyzed_results[0]["token_usage"])
+
                 # Display results
                 st.markdown("## 📊 Analysis Results")
                 

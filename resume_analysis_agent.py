@@ -63,7 +63,6 @@ class PreferencesMatchDetails(BaseModel):
     growth_potential: float = Field(..., ge=0, le=100, description="Score for growth/learning potential")
     explanation: str = Field(..., description="Detailed explanation of preferences analysis")
 
-# Extended ResumeState to include new components
 class ResumeState(TypedDict):
     job_description: str
     resume_content: str
@@ -76,6 +75,8 @@ class ResumeState(TypedDict):
     role_score: float
     preferences_score: float
     analysis_details: Dict
+    total_input_tokens: int
+    total_output_tokens: int
 
 class ResumeAnalysisAgent:
     def __init__(self):
@@ -110,6 +111,11 @@ class ResumeAnalysisAgent:
         self.workflow.set_entry_point("education")
         self.app = self.workflow.compile()
 
+    def estimate_tokens(self, text: str) -> int:
+        """Estimate token count based on word count"""
+        words = len(text.split())
+        return int(words * 0.9)
+
     def analyze_education(self, state: ResumeState) -> ResumeState:
         structured_llm = self.llm.with_structured_output(EducationDetails)
         
@@ -117,11 +123,8 @@ class ResumeAnalysisAgent:
         Analyze the resume and provide scores and detailed explanations for educational components."""
         
         human_message = """Analyze these educational qualifications:
-
         Job Description: {job_description}
-        
         Resume Content: {resume_content}
-        
         Provide:
         1. Scores (0-100) for:
            - Degree relevance to the position
@@ -130,23 +133,29 @@ class ResumeAnalysisAgent:
            - Relevant certifications
         2. A detailed explanation of your analysis"""
 
+        # Count input tokens
+        formatted_message = system_message + human_message.format(
+            job_description=state["job_description"],
+            resume_content=state["resume_content"]
+        )
+        state["total_input_tokens"] += self.estimate_tokens(formatted_message)
+
+        # Get response
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_message),
             ("human", human_message)
         ])
-
         result = prompt | structured_llm
         output = result.invoke({
             "job_description": state["job_description"],
             "resume_content": state["resume_content"]
         })
 
-        scores = [
-            output.degree_relevance,
-            output.education_level,
-            output.academic_achievements,
-            output.certifications
-        ]
+        # Count output tokens
+        state["total_output_tokens"] += self.estimate_tokens(str(output.model_dump()))
+
+        scores = [output.degree_relevance, output.education_level, 
+                 output.academic_achievements, output.certifications]
         state["education_score"] = sum(scores) / len(scores)
         state["analysis_details"]["education"] = output.model_dump()
         return state
@@ -154,15 +163,10 @@ class ResumeAnalysisAgent:
     def analyze_skills(self, state: ResumeState) -> ResumeState:
         structured_llm = self.llm.with_structured_output(SkillsDetails)
         
-        system_message = """You are a resume analyzer specializing in skills assessment.
-        Analyze the resume and provide scores and detailed explanations for skill components."""
-        
+        system_message = """You are a resume analyzer specializing in skills assessment."""
         human_message = """Analyze these skills:
-
         Job Description: {job_description}
-        
         Resume Content: {resume_content}
-        
         Provide:
         1. Scores (0-100) for:
            - Technical skills match
@@ -171,23 +175,29 @@ class ResumeAnalysisAgent:
            - Domain expertise
         2. A detailed explanation of your analysis"""
 
+        # Count input tokens
+        formatted_message = system_message + human_message.format(
+            job_description=state["job_description"],
+            resume_content=state["resume_content"]
+        )
+        state["total_input_tokens"] += self.estimate_tokens(formatted_message)
+
+        # Get response
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_message),
             ("human", human_message)
         ])
-
         result = prompt | structured_llm
         output = result.invoke({
             "job_description": state["job_description"],
             "resume_content": state["resume_content"]
         })
 
-        scores = [
-            output.technical_skills,
-            output.soft_skills,
-            output.tools_tech,
-            output.domain_expertise
-        ]
+        # Count output tokens
+        state["total_output_tokens"] += self.estimate_tokens(str(output.model_dump()))
+
+        scores = [output.technical_skills, output.soft_skills,
+                 output.tools_tech, output.domain_expertise]
         state["skills_score"] = sum(scores) / len(scores)
         state["analysis_details"]["skills"] = output.model_dump()
         return state
@@ -195,15 +205,10 @@ class ResumeAnalysisAgent:
     def analyze_experience(self, state: ResumeState) -> ResumeState:
         structured_llm = self.llm.with_structured_output(ExperienceDetails)
         
-        system_message = """You are a resume analyzer specializing in work experience assessment.
-        Analyze the resume and provide scores and detailed explanations for experience components."""
-        
+        system_message = """You are a resume analyzer specializing in work experience assessment."""
         human_message = """Analyze this work experience:
-
         Job Description: {job_description}
-        
         Resume Content: {resume_content}
-        
         Provide:
         1. Scores (0-100) for:
            - Years of experience relevance
@@ -212,23 +217,29 @@ class ResumeAnalysisAgent:
            - Notable achievements
         2. A detailed explanation of your analysis"""
 
+        # Count input tokens
+        formatted_message = system_message + human_message.format(
+            job_description=state["job_description"],
+            resume_content=state["resume_content"]
+        )
+        state["total_input_tokens"] += self.estimate_tokens(formatted_message)
+
+        # Get response
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_message),
             ("human", human_message)
         ])
-
         result = prompt | structured_llm
         output = result.invoke({
             "job_description": state["job_description"],
             "resume_content": state["resume_content"]
         })
 
-        scores = [
-            output.years_experience,
-            output.role_relevance,
-            output.industry_fit,
-            output.achievements
-        ]
+        # Count output tokens
+        state["total_output_tokens"] += self.estimate_tokens(str(output.model_dump()))
+
+        scores = [output.years_experience, output.role_relevance,
+                 output.industry_fit, output.achievements]
         state["experience_score"] = sum(scores) / len(scores)
         state["analysis_details"]["experience"] = output.model_dump()
         return state
@@ -236,40 +247,41 @@ class ResumeAnalysisAgent:
     def analyze_tools(self, state: ResumeState) -> ResumeState:
         structured_llm = self.llm.with_structured_output(ToolsMatchDetails)
         
-        system_message = """You are a resume analyzer specializing in tools and technology assessment.
-        Analyze the resume and provide scores and detailed explanations for tools/technology proficiency."""
-        
-        human_message = """Analyze the tools and technology match:
-
+        system_message = """You are a resume analyzer specializing in tools assessment."""
+        human_message = """Analyze the tools match:
         Job Description: {job_description}
-        
         Resume Content: {resume_content}
-        
         Provide:
         1. Scores (0-100) for:
            - Required tools proficiency
            - Years of experience with tools
            - Range of tools known
-           - Tool-specific certifications
+           - Tool certifications
         2. A detailed explanation of your analysis"""
 
+        # Count input tokens
+        formatted_message = system_message + human_message.format(
+            job_description=state["job_description"],
+            resume_content=state["resume_content"]
+        )
+        state["total_input_tokens"] += self.estimate_tokens(formatted_message)
+
+        # Get response
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_message),
             ("human", human_message)
         ])
-
         result = prompt | structured_llm
         output = result.invoke({
             "job_description": state["job_description"],
             "resume_content": state["resume_content"]
         })
 
-        scores = [
-            output.required_tools_proficiency,
-            output.tool_experience_years,
-            output.tool_diversity,
-            output.tool_certifications
-        ]
+        # Count output tokens
+        state["total_output_tokens"] += self.estimate_tokens(str(output.model_dump()))
+
+        scores = [output.required_tools_proficiency, output.tool_experience_years,
+                 output.tool_diversity, output.tool_certifications]
         state["tools_score"] = sum(scores) / len(scores)
         state["analysis_details"]["tools"] = output.model_dump()
         return state
@@ -277,15 +289,10 @@ class ResumeAnalysisAgent:
     def analyze_industry(self, state: ResumeState) -> ResumeState:
         structured_llm = self.llm.with_structured_output(IndustryMatchDetails)
         
-        system_message = """You are a resume analyzer specializing in industry fit assessment.
-        Analyze the resume and provide scores and detailed explanations for industry match."""
-        
+        system_message = """You are a resume analyzer specializing in industry assessment."""
         human_message = """Analyze the industry match:
-
         Job Description: {job_description}
-        
         Resume Content: {resume_content}
-        
         Provide:
         1. Scores (0-100) for:
            - Industry experience
@@ -294,23 +301,29 @@ class ResumeAnalysisAgent:
            - Industry networking
         2. A detailed explanation of your analysis"""
 
+        # Count input tokens
+        formatted_message = system_message + human_message.format(
+            job_description=state["job_description"],
+            resume_content=state["resume_content"]
+        )
+        state["total_input_tokens"] += self.estimate_tokens(formatted_message)
+
+        # Get response
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_message),
             ("human", human_message)
         ])
-
         result = prompt | structured_llm
         output = result.invoke({
             "job_description": state["job_description"],
             "resume_content": state["resume_content"]
         })
 
-        scores = [
-            output.industry_experience,
-            output.industry_knowledge,
-            output.industry_projects,
-            output.industry_network
-        ]
+        # Count output tokens
+        state["total_output_tokens"] += self.estimate_tokens(str(output.model_dump()))
+
+        scores = [output.industry_experience, output.industry_knowledge,
+                 output.industry_projects, output.industry_network]
         state["industry_score"] = sum(scores) / len(scores)
         state["analysis_details"]["industry"] = output.model_dump()
         return state
@@ -318,40 +331,41 @@ class ResumeAnalysisAgent:
     def analyze_role(self, state: ResumeState) -> ResumeState:
         structured_llm = self.llm.with_structured_output(RoleMatchDetails)
         
-        system_message = """You are a resume analyzer specializing in role requirements assessment.
-        Analyze the resume and provide scores and detailed explanations for role match."""
-        
+        system_message = """You are a resume analyzer specializing in role requirements."""
         human_message = """Analyze the role match:
-
         Job Description: {job_description}
-        
         Resume Content: {resume_content}
-        
         Provide:
         1. Scores (0-100) for:
-           - Role responsibilities match
+           - Role responsibilities
            - Leadership requirements
-           - Project management experience
+           - Project management
            - Team collaboration
         2. A detailed explanation of your analysis"""
 
+        # Count input tokens
+        formatted_message = system_message + human_message.format(
+            job_description=state["job_description"],
+            resume_content=state["resume_content"]
+        )
+        state["total_input_tokens"] += self.estimate_tokens(formatted_message)
+
+        # Get response
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_message),
             ("human", human_message)
         ])
-
         result = prompt | structured_llm
         output = result.invoke({
             "job_description": state["job_description"],
             "resume_content": state["resume_content"]
         })
 
-        scores = [
-            output.role_responsibilities,
-            output.leadership_requirements,
-            output.project_management,
-            output.team_collaboration
-        ]
+        # Count output tokens
+        state["total_output_tokens"] += self.estimate_tokens(str(output.model_dump()))
+
+        scores = [output.role_responsibilities, output.leadership_requirements,
+                 output.project_management, output.team_collaboration]
         state["role_score"] = sum(scores) / len(scores)
         state["analysis_details"]["role"] = output.model_dump()
         return state
@@ -359,15 +373,10 @@ class ResumeAnalysisAgent:
     def analyze_preferences(self, state: ResumeState) -> ResumeState:
         structured_llm = self.llm.with_structured_output(PreferencesMatchDetails)
         
-        system_message = """You are a resume analyzer specializing in additional preferences assessment.
-        Analyze the resume and provide scores and detailed explanations for preferences match."""
-        
+        system_message = """You are a resume analyzer specializing in preferences assessment."""
         human_message = """Analyze the preferences match:
-
         Job Description: {job_description}
-        
         Resume Content: {resume_content}
-        
         Provide:
         1. Scores (0-100) for:
            - Work style compatibility
@@ -376,23 +385,29 @@ class ResumeAnalysisAgent:
            - Growth potential
         2. A detailed explanation of your analysis"""
 
+        # Count input tokens
+        formatted_message = system_message + human_message.format(
+            job_description=state["job_description"],
+            resume_content=state["resume_content"]
+        )
+        state["total_input_tokens"] += self.estimate_tokens(formatted_message)
+
+        # Get response
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_message),
             ("human", human_message)
         ])
-
         result = prompt | structured_llm
         output = result.invoke({
             "job_description": state["job_description"],
             "resume_content": state["resume_content"]
         })
 
-        scores = [
-            output.work_style,
-            output.location_match,
-            output.culture_fit,
-            output.growth_potential
-        ]
+        # Count output tokens
+        state["total_output_tokens"] += self.estimate_tokens(str(output.model_dump()))
+
+        scores = [output.work_style, output.location_match,
+                 output.culture_fit, output.growth_potential]
         state["preferences_score"] = sum(scores) / len(scores)
         state["analysis_details"]["preferences"] = output.model_dump()
         return state
@@ -409,7 +424,9 @@ class ResumeAnalysisAgent:
             industry_score=0.0,
             role_score=0.0,
             preferences_score=0.0,
-            analysis_details={}
+            analysis_details={},
+            total_input_tokens=0,  # Initialize token counters
+            total_output_tokens=0
         )
         
         try:
@@ -425,14 +442,9 @@ class ResumeAnalysisAgent:
                 "preferences": 0.05
             }
             
-            total_score = (
-                final_state["education_score"] * weights["education"] +
-                final_state["skills_score"] * weights["skills"] +
-                final_state["experience_score"] * weights["experience"] +
-                final_state["tools_score"] * weights["tools"] +
-                final_state["industry_score"] * weights["industry"] +
-                final_state["role_score"] * weights["role"] +
-                final_state["preferences_score"] * weights["preferences"]
+            total_score = sum(
+                final_state[f"{component}_score"] * weight
+                for component, weight in weights.items()
             )
 
             return {
@@ -475,13 +487,13 @@ class ResumeAnalysisAgent:
                     "industry": final_state["analysis_details"]["industry"]["explanation"],
                     "role": final_state["analysis_details"]["role"]["explanation"],
                     "preferences": final_state["analysis_details"]["preferences"]["explanation"]
+                },
+                "token_usage": {
+                    "input_tokens": final_state["total_input_tokens"],
+                    "output_tokens": final_state["total_output_tokens"]
                 }
             }
             
         except Exception as e:
             print(f"Error in analyze_resume: {str(e)}")
             raise
-
-
-
-
