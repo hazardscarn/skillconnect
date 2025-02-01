@@ -12,7 +12,8 @@ packages = [
     'langgraph',
     'langchain-google-genai',
     'langchain-openai',
-    'pydantic'
+    'pydantic',
+    'langchain'
 ]
 
 for package in packages:
