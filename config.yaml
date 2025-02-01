@@ -1,0 +1,36 @@
+models:
+  gemini-flash-001:
+    name: "Gemini Flash 1.5"
+    provider: "google"
+    model_id: "gemini-1.5-flash-latest"
+    temperature: 0.3
+    available: true
+    default: true
+    description: "Fast and efficient for most analysis tasks"
+    pricing:
+      input: 0.075
+      output: 0.3
+    
+  gemini-flash-002:
+    name: "Gemini Flash 2.0 Experimental"
+    provider: "google"
+    model_id: "gemini-2.0-flash-exp"
+    temperature: 0.3
+    available: true
+    default: false
+    description: "Experimental version with potential improvements"
+    pricing:
+      input: 0.1
+      output: 0.4
+    
+  gpt4-o-mini:
+    name: "GPT-4 Opus Mini"
+    provider: "openai"
+    model_id: "gpt-4o-mini-2024-07-18"
+    temperature: 0.3
+    available: true
+    default: false
+    description: "Balanced performance and cost"
+    pricing:
+      input: 0.15
+      output: 0.6
