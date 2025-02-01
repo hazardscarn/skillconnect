@@ -8,6 +8,7 @@ from datetime import datetime
 from resume_analysis_agent import ResumeAnalysisAgent
 import PyPDF2
 import docx2txt
+from model_manager import ModelManager
 
 # Set up the main page
 st.set_page_config(
@@ -358,15 +359,49 @@ def main():
         os.makedirs(os.path.join(st.session_state.temp_dir, 'job_posting'), exist_ok=True)
         os.makedirs(os.path.join(st.session_state.temp_dir, 'resumes'), exist_ok=True)
 
-    # Initialize analysis agent
-    try:
-        analysis_agent = initialize_agent()
-    except Exception as e:
-        st.error(f"Error initializing analysis agent: {str(e)}")
-        return
-
     # Sidebar
     with st.sidebar:
+
+        # Model Selection
+        st.subheader("🤖 Model Selection")
+        model_manager = ModelManager()
+        model_names = model_manager.get_model_names()
+        
+        selected_model_id = st.selectbox(
+            "Choose Analysis Model",
+            options=list(model_names.keys()),
+            format_func=lambda x: model_names[x],
+            index=list(model_names.keys()).index(model_manager.get_default_model_id())
+        )
+        
+        # Display model description
+        st.markdown(f"""
+            <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-top: 10px;">
+                <small>{model_manager.get_model_description(selected_model_id)}</small>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Display pricing information
+        pricing = model_manager.get_model_pricing(selected_model_id)
+        st.markdown("""
+            <div style="margin-top: 10px;">
+                <small>
+                    <b>Pricing (per million tokens):</b><br>
+                    Input: ${:.3f}<br>
+                    Output: ${:.3f}
+                </small>
+            </div>
+        """.format(pricing['input'], pricing['output']), unsafe_allow_html=True)
+        
+        st.markdown("---")
+            # Initialize analysis agent
+        try:
+            analysis_agent = ResumeAnalysisAgent(model_id=selected_model_id)
+        except Exception as e:
+            st.error(f"Error initializing analysis agent: {str(e)}")
+            return
+
+
         st.title("📁 File Management")
         
         # Job Posting Upload

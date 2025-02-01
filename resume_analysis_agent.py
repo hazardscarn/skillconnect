@@ -1,5 +1,5 @@
-from typing import TypedDict, Dict, Annotated
-from pydantic import BaseModel, Field
+from typing import TypedDict, Dict, Annotated,Optional
+from pydantic import BaseModel, Field, field_validator
 from langgraph.graph import StateGraph, START, END
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
@@ -7,63 +7,106 @@ import os
 from dotenv import load_dotenv
 import operator
 from functools import reduce
+from model_manager import ModelManager
 
 # Pydantic models for structured outputs
 class EducationDetails(BaseModel):
     """Detailed scores and explanations for education assessment"""
-    degree_relevance: float = Field(..., ge=0, le=100, description="Score for degree relevance")
-    education_level: float = Field(..., ge=0, le=100, description="Score for education level match")
-    academic_achievements: float = Field(..., ge=0, le=100, description="Score for academic achievements")
-    certifications: float = Field(..., ge=0, le=100, description="Score for relevant certifications")
-    explanation: str = Field(..., description="Detailed explanation of education analysis")
+    degree_relevance: float = Field(description="Score for degree relevance")
+    education_level: float = Field(description="Score for education level match")
+    academic_achievements: float = Field(description="Score for academic achievements")
+    certifications: float = Field(description="Score for relevant certifications")
+    explanation: str = Field(description="Detailed explanation of education analysis")
+
+    @field_validator('degree_relevance', 'education_level', 'academic_achievements', 'certifications')
+    def validate_score(cls, v):
+        if not 0 <= v <= 100:
+            raise ValueError("Score must be between 0 and 100")
+        return v
 
 class SkillsDetails(BaseModel):
     """Detailed scores and explanations for skills assessment"""
-    technical_skills: float = Field(..., ge=0, le=100, description="Score for technical skills match")
-    soft_skills: float = Field(..., ge=0, le=100, description="Score for soft skills match")
-    tools_tech: float = Field(..., ge=0, le=100, description="Score for tools and technologies")
-    domain_expertise: float = Field(..., ge=0, le=100, description="Score for domain expertise")
-    explanation: str = Field(..., description="Detailed explanation of skills analysis")
+    technical_skills: float = Field(description="Score for technical skills match")
+    soft_skills: float = Field(description="Score for soft skills match")
+    tools_tech: float = Field(description="Score for tools and technologies")
+    domain_expertise: float = Field(description="Score for domain expertise")
+    explanation: str = Field(description="Detailed explanation of skills analysis")
+
+    @field_validator('technical_skills', 'soft_skills', 'tools_tech', 'domain_expertise')
+    def validate_score(cls, v):
+        if not 0 <= v <= 100:
+            raise ValueError("Score must be between 0 and 100")
+        return v
 
 class ExperienceDetails(BaseModel):
     """Detailed scores and explanations for experience assessment"""
-    years_experience: float = Field(..., ge=0, le=100, description="Score for years of experience")
-    role_relevance: float = Field(..., ge=0, le=100, description="Score for role relevance")
-    industry_fit: float = Field(..., ge=0, le=100, description="Score for industry fit")
-    achievements: float = Field(..., ge=0, le=100, description="Score for achievements")
-    explanation: str = Field(..., description="Detailed explanation of experience analysis")
+    years_experience: float = Field(description="Score for years of experience")
+    role_relevance: float = Field(description="Score for role relevance")
+    industry_fit: float = Field(description="Score for industry fit")
+    achievements: float = Field(description="Score for achievements")
+    explanation: str = Field(description="Detailed explanation of experience analysis")
+
+    @field_validator('years_experience', 'role_relevance', 'industry_fit', 'achievements')
+    def validate_score(cls, v):
+        if not 0 <= v <= 100:
+            raise ValueError("Score must be between 0 and 100")
+        return v
 
 class ToolsMatchDetails(BaseModel):
     """Detailed scores and explanations for tools/technology assessment"""
-    required_tools_proficiency: float = Field(..., ge=0, le=100, description="Score for required tools proficiency")
-    tool_experience_years: float = Field(..., ge=0, le=100, description="Score for years of experience with tools")
-    tool_diversity: float = Field(..., ge=0, le=100, description="Score for range of tools known")
-    tool_certifications: float = Field(..., ge=0, le=100, description="Score for tool-specific certifications")
-    explanation: str = Field(..., description="Detailed explanation of tools analysis")
+    required_tools_proficiency: float = Field(description="Score for required tools proficiency")
+    tool_experience_years: float = Field(description="Score for years of experience with tools")
+    tool_diversity: float = Field(description="Score for range of tools known")
+    tool_certifications: float = Field(description="Score for tool-specific certifications")
+    explanation: str = Field(description="Detailed explanation of tools analysis")
+
+    @field_validator('required_tools_proficiency', 'tool_experience_years', 'tool_diversity', 'tool_certifications')
+    def validate_score(cls, v):
+        if not 0 <= v <= 100:
+            raise ValueError("Score must be between 0 and 100")
+        return v
 
 class IndustryMatchDetails(BaseModel):
     """Detailed scores and explanations for industry fit assessment"""
-    industry_experience: float = Field(..., ge=0, le=100, description="Score for relevant industry experience")
-    industry_knowledge: float = Field(..., ge=0, le=100, description="Score for industry-specific knowledge")
-    industry_projects: float = Field(..., ge=0, le=100, description="Score for industry projects completed")
-    industry_network: float = Field(..., ge=0, le=100, description="Score for industry connections/networking")
-    explanation: str = Field(..., description="Detailed explanation of industry analysis")
+    industry_experience: float = Field(description="Score for relevant industry experience")
+    industry_knowledge: float = Field(description="Score for industry-specific knowledge")
+    industry_projects: float = Field(description="Score for industry projects completed")
+    industry_network: float = Field(description="Score for industry connections/networking")
+    explanation: str = Field(description="Detailed explanation of industry analysis")
+
+    @field_validator('industry_experience', 'industry_knowledge', 'industry_projects', 'industry_network')
+    def validate_score(cls, v):
+        if not 0 <= v <= 100:
+            raise ValueError("Score must be between 0 and 100")
+        return v
 
 class RoleMatchDetails(BaseModel):
     """Detailed scores and explanations for role requirements match"""
-    role_responsibilities: float = Field(..., ge=0, le=100, description="Score for matching role responsibilities")
-    leadership_requirements: float = Field(..., ge=0, le=100, description="Score for leadership experience if required")
-    project_management: float = Field(..., ge=0, le=100, description="Score for project management experience")
-    team_collaboration: float = Field(..., ge=0, le=100, description="Score for team collaboration experience")
-    explanation: str = Field(..., description="Detailed explanation of role match analysis")
+    role_responsibilities: float = Field(description="Score for matching role responsibilities")
+    leadership_requirements: float = Field(description="Score for leadership experience if required")
+    project_management: float = Field(description="Score for project management experience")
+    team_collaboration: float = Field(description="Score for team collaboration experience")
+    explanation: str = Field(description="Detailed explanation of role match analysis")
+
+    @field_validator('role_responsibilities', 'leadership_requirements', 'project_management', 'team_collaboration')
+    def validate_score(cls, v):
+        if not 0 <= v <= 100:
+            raise ValueError("Score must be between 0 and 100")
+        return v
 
 class PreferencesMatchDetails(BaseModel):
     """Detailed scores and explanations for additional preferences match"""
-    work_style: float = Field(..., ge=0, le=100, description="Score for work style compatibility")
-    location_match: float = Field(..., ge=0, le=100, description="Score for location preferences")
-    culture_fit: float = Field(..., ge=0, le=100, description="Score for cultural fit indicators")
-    growth_potential: float = Field(..., ge=0, le=100, description="Score for growth/learning potential")
-    explanation: str = Field(..., description="Detailed explanation of preferences analysis")
+    work_style: float = Field(description="Score for work style compatibility")
+    location_match: float = Field(description="Score for location preferences")
+    culture_fit: float = Field(description="Score for cultural fit indicators")
+    growth_potential: float = Field(description="Score for growth/learning potential")
+    explanation: str = Field(description="Detailed explanation of preferences analysis")
+
+    @field_validator('work_style', 'location_match', 'culture_fit', 'growth_potential')
+    def validate_score(cls, v):
+        if not 0 <= v <= 100:
+            raise ValueError("Score must be between 0 and 100")
+        return v
 
 def max_reducer(a: float, b: float) -> float:
     """Binary reducer to take maximum of two values"""
@@ -90,14 +133,11 @@ class ResumeState(TypedDict):
     final_analysis: dict
 
 class ResumeAnalysisAgent:
-    def __init__(self):
-        load_dotenv()
-        
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash-latest",
-            temperature=0.3,
-            google_api_key=os.getenv("GOOGLE_API_KEY")
-        )
+    def __init__(self, model_id: Optional[str] = None):
+        """Initialize agent with specified model or default model"""
+        self.model_manager = ModelManager()
+        self.model_id = model_id or self.model_manager.get_default_model_id()
+        self.llm = self.model_manager.initialize_model(self.model_id)
 
         # Initialize workflow
         self.workflow = StateGraph(ResumeState)
@@ -124,7 +164,17 @@ class ResumeAnalysisAgent:
 
         # Compile workflow
         self.app = self.workflow.compile()
-
+    
+    
+    def get_model_info(self) -> Dict:
+        """Get information about the currently used model"""
+        return {
+            "model_id": self.model_id,
+            "name": self.model_manager.models_config[self.model_id]["name"],
+            "description": self.model_manager.get_model_description(self.model_id),
+            "pricing": self.model_manager.get_model_pricing(self.model_id)
+        }
+    
     def estimate_tokens(self, text: str) -> int:
         """Estimate token count based on word count"""
         return int(len(text.split()) * 0.9)

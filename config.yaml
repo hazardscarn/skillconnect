@@ -11,18 +11,6 @@ models:
       input: 0.075
       output: 0.3
     
-  gemini-flash-002:
-    name: "Gemini Flash 2.0 Experimental"
-    provider: "google"
-    model_id: "gemini-2.0-flash-exp"
-    temperature: 0.3
-    available: true
-    default: false
-    description: "Experimental version with potential improvements"
-    pricing:
-      input: 0.1
-      output: 0.4
-    
   gpt4-o-mini:
     name: "GPT-4 Opus Mini"
     provider: "openai"
@@ -34,3 +22,17 @@ models:
     pricing:
       input: 0.15
       output: 0.6
+
+non_availble_or_notFree:
+    
+  gemini-flash-002:
+    name: "Gemini Flash 2.0 Experimental"
+    provider: "google"
+    model_id: "gemini-2.0-flash-exp"
+    temperature: 0.3
+    available: true
+    default: false
+    description: "Experimental version with potential improvements"
+    pricing:
+      input: 0.1
+      output: 0.4
