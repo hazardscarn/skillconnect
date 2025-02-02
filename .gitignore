@@ -1,0 +1,5 @@
+venv
+.env
+sample_resume
+sample_job_posting
+chk_ver.py
