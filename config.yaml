@@ -11,17 +11,7 @@ models:
       input: 0.075
       output: 0.3
     
-  gpt4-o-mini:
-    name: "GPT-4 Opus Mini"
-    provider: "openai"
-    model_id: "gpt-4o-mini-2024-07-18"
-    temperature: 0.3
-    available: true
-    default: false
-    description: "Balanced performance and cost"
-    pricing:
-      input: 0.15
-      output: 0.6
+
 
 non_availble_or_notFree:
     
@@ -36,3 +26,15 @@ non_availble_or_notFree:
     pricing:
       input: 0.1
       output: 0.4
+
+  gpt4-o-mini:
+    name: "GPT-4 Opus Mini"
+    provider: "openai"
+    model_id: "gpt-4o-mini-2024-07-18"
+    temperature: 0.3
+    available: true
+    default: false
+    description: "Balanced performance and cost"
+    pricing:
+      input: 0.15
+      output: 0.6
