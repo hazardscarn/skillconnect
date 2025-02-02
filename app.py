@@ -1,204 +1,25 @@
 import streamlit as st
 import os
 import shutil
-from pathlib import Path
-import pandas as pd
 import tempfile
-from datetime import datetime
-from resume_analysis_agent import ResumeAnalysisAgent
-from sequential_resume_analysis_agent import SequentialResumeAnalysisAgent
-import PyPDF2
-import docx2txt
-from model_manager import ModelManager
+from pathlib import Path
 from typing import Optional
+import atexit
 
-# Set up the main page
+from file_utils import read_file_content, save_uploaded_file
+from display_utils import (
+    create_summary_table, display_file_tree, display_detailed_results,
+    display_weight_controls, load_custom_css
+)
+from model_manager import ModelManager
+from resume_analysis_agent import ResumeAnalysisAgent
+
+# Page configuration
 st.set_page_config(
     page_title="Resume Analysis System",
     page_icon="📊",
     layout="wide"
 )
-
-# Custom CSS to be added at the beginning of the main function
-custom_css = """
-<style>
-.score-card {
-    background-color: white;
-    padding: 15px;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin: 10px 0;
-}
-
-.score-label {
-    font-size: 0.9em;
-    color: #666;
-    margin-bottom: 5px;
-}
-
-.score-value {
-    font-size: 1.2em;
-    font-weight: bold;
-    color: #1f77b4;
-}
-
-.total-score {
-    font-size: 1.5em;
-    font-weight: bold;
-    color: #2ecc71;
-}
-
-.explanation {
-    font-size: 0.9em;
-    color: #333;
-    margin-top: 10px;
-    padding: 10px;
-    background-color: #f8f9fa;
-    border-radius: 5px;
-}
-
-.token-info {
-    background-color: #f8f9fa;
-    padding: 15px;
-    border-radius: 10px;
-    margin: 10px 0;
-    border: 1px solid #dee2e6;
-}
-
-.stProgress > div > div > div > div {
-    background-color: #2ecc71;
-}
-
-/* File tree customization */
-.file-tree {
-    font-family: 'Courier New', monospace;
-    background-color: #f8f9fa;
-    padding: 15px;
-    border-radius: 10px;
-    border: 1px solid #e9ecef;
-    margin-bottom: 15px;
-}
-
-.folder-name {
-    color: #2962ff;
-    font-weight: bold;
-    font-size: 1.1em;
-    margin: 10px 0 5px 0;
-    padding-left: 5px;
-    border-left: 3px solid #2962ff;
-}
-
-.file-item {
-    margin-left: 20px;
-    padding: 5px 0;
-    display: flex;
-    align-items: center;
-    transition: background-color 0.2s;
-}
-
-.file-item:hover {
-    background-color: #e9ecef;
-    border-radius: 5px;
-}
-
-/* Upload section customization */
-.upload-section {
-    background-color: white;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin-bottom: 20px;
-}
-
-.upload-header {
-    color: #2c3e50;
-    font-size: 1.2em;
-    margin-bottom: 10px;
-}
-
-/* Analysis results customization */
-.analysis-section {
-    background-color: white;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin-top: 20px;
-}
-
-.analysis-header {
-    color: #2c3e50;
-    font-size: 1.3em;
-    margin-bottom: 15px;
-    padding-bottom: 10px;
-    border-bottom: 2px solid #e9ecef;
-}
-
-/* Button customization */
-.stButton button {
-    border-radius: 20px;
-    padding: 10px 25px;
-    font-weight: 500;
-    transition: all 0.3s ease;
-}
-
-.stButton button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-}
-
-/* Progress bar customization */
-.stProgress > div > div > div {
-    border-radius: 10px;
-}
-
-/* Expander customization */
-.streamlit-expanderHeader {
-    background-color: #f8f9fa;
-    border-radius: 5px;
-    padding: 10px !important;
-}
-
-.streamlit-expanderHeader:hover {
-    background-color: #e9ecef;
-}
-</style>
-"""
-
-def read_file_content(file_path):
-    """Read content from PDF or DOCX files"""
-    file_extension = os.path.splitext(file_path)[1].lower()
-    
-    if file_extension == '.pdf':
-        try:
-            with open(file_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                content = ""
-                for page in pdf_reader.pages:
-                    content += page.extract_text()
-                return content
-        except Exception as e:
-            st.error(f"Error reading PDF file: {str(e)}")
-            return None
-            
-    elif file_extension == '.docx':
-        try:
-            content = docx2txt.process(file_path)
-            return content
-        except Exception as e:
-            st.error(f"Error reading DOCX file: {str(e)}")
-            return None
-            
-    elif file_extension == '.txt':
-        try:
-            with open(file_path, 'r', encoding='utf-8') as file:
-                return file.read()
-        except Exception as e:
-            st.error(f"Error reading TXT file: {str(e)}")
-            return None
-    
-    else:
-        st.error(f"Unsupported file format: {file_extension}")
-        return None
 
 @st.cache_resource
 def initialize_agent(model_id: Optional[str] = None):
@@ -206,163 +27,45 @@ def initialize_agent(model_id: Optional[str] = None):
     model_manager = ModelManager()
     if model_id is None:
         model_id = model_manager.get_default_model_id()
-    
-    model_config = model_manager.models_config[model_id]
     return ResumeAnalysisAgent(model_id)
-    if model_config['provider'] == 'openai':
-        return SequentialResumeAnalysisAgent(model_id)
-    else:
-        return ResumeAnalysisAgent(model_id)
 
-def save_uploaded_file(uploaded_file, directory):
-    """Save uploaded file to specified directory"""
-    if uploaded_file is not None:
-        file_path = os.path.join(directory, uploaded_file.name)
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        return file_path
-    return None
+def handle_file_upload():
+    """Handle file uploads in sidebar"""
+    # Job Posting Upload
+    st.subheader("Upload Job Description")
+    jd_file = st.file_uploader("Choose a job description file", 
+                              type=['pdf', 'docx', 'txt'],
+                              key="jd_uploader")
+    
+    if jd_file is not None:
+        jd_dir = os.path.join(st.session_state.temp_dir, 'job_posting')
+        for file in os.listdir(jd_dir):
+            os.remove(os.path.join(jd_dir, file))
+        
+        save_uploaded_file(jd_file, jd_dir)
+        st.success(f"Job Description uploaded: {jd_file.name}")
 
-def display_file_tree():
-    """Display file structure with download buttons"""
-    st.markdown("""
-        <style>
-            .file-tree {
-                background-color: #f8f9fa;
-                padding: 10px;
-                border-radius: 5px;
-                margin-bottom: 10px;
-            }
-            .folder-name {
-                color: #2962ff;
-                font-weight: bold;
-                font-size: 1.1em;
-                margin: 10px 0 5px 0;
-            }
-            .file-item {
-                margin-left: 20px;
-                padding: 5px 0;
-            }
-        </style>
-    """, unsafe_allow_html=True)
+# Resume Upload
+    st.subheader("Upload Resumes")
+    resume_files = st.file_uploader("Choose resume files", 
+                                  type=['pdf', 'docx'],
+                                  accept_multiple_files=True,
+                                  key="resume_uploader")
+    
+    if resume_files:
+        resume_dir = os.path.join(st.session_state.temp_dir, 'resumes')
+        for resume in resume_files:
+            save_uploaded_file(resume, resume_dir)
+        st.success(f"Uploaded {len(resume_files)} resume(s)")
 
-    # Display Job Posting section
-    st.markdown('<div class="file-tree">', unsafe_allow_html=True)
-    st.markdown('<div class="folder-name">📁 job_posting</div>', unsafe_allow_html=True)
-    job_posting_path = os.path.join(st.session_state.temp_dir, 'job_posting')
-    if os.path.exists(job_posting_path):
-        for file in os.listdir(job_posting_path):
-            with st.container():
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.markdown(f'<div class="file-item">📄 {file}</div>', unsafe_allow_html=True)
-                with col2:
-                    with open(os.path.join(job_posting_path, file), 'rb') as f:
-                        st.download_button(
-                            label="📥",
-                            data=f,
-                            file_name=file,
-                            mime="application/octet-stream",
-                            key=f"dl_jd_{file}"
-                        )
-
-    # Display Resumes section
-    st.markdown('<div class="folder-name">📁 resumes</div>', unsafe_allow_html=True)
-    resumes_path = os.path.join(st.session_state.temp_dir, 'resumes')
-    if os.path.exists(resumes_path):
-        for file in os.listdir(resumes_path):
-            with st.container():
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.markdown(f'<div class="file-item">📄 {file}</div>', unsafe_allow_html=True)
-                with col2:
-                    with open(os.path.join(resumes_path, file), 'rb') as f:
-                        st.download_button(
-                            label="📥",
-                            data=f,
-                            file_name=file,
-                            mime="application/octet-stream",
-                            key=f"dl_resume_{file}"
-                        )
-    st.markdown('</div>', unsafe_allow_html=True)
-
-def create_summary_table(analyzed_results):
-    """Create summary DataFrame for displaying results"""
-    summary_data = []
-    for result in analyzed_results:
-        summary_data.append({
-            'Resume': result['file_name'],
-            'Total Score': f"{result['total_score']:.1f}%",
-            'Education': f"{result['component_scores']['education']['score']:.1f}%",
-            'Skills': f"{result['component_scores']['skills']['score']:.1f}%",
-            'Experience': f"{result['component_scores']['experience']['score']:.1f}%",
-            'Tools': f"{result['component_scores']['tools']['score']:.1f}%",
-            'Industry': f"{result['component_scores']['industry']['score']:.1f}%",
-            'Role': f"{result['component_scores']['role']['score']:.1f}%",
-            'Preferences': f"{result['component_scores']['preferences']['score']:.1f}%"
-        })
-    return pd.DataFrame(summary_data)
-
-def display_detailed_results(analyzed_results):
-    """Display detailed analysis for each resume"""
-    for idx, result in enumerate(analyzed_results, 1):
-        with st.expander(f"📄 Resume #{idx}: {result['file_name']}", expanded=idx==1):
-            # Display total score
-            st.markdown(f"""
-                <div class="score-card">
-                    <div class="score-label">Total Score</div>
-                    <div class="total-score">{result['total_score']:.1f}%</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # Display all component scores in two rows
-            row1_cols = st.columns(4)
-            row2_cols = st.columns(3)
-            
-            components = {
-                'row1': ['education', 'skills', 'experience', 'tools'],
-                'row2': ['industry', 'role', 'preferences']
-            }
-            
-            # First row
-            for i, component in enumerate(components['row1']):
-                with row1_cols[i]:
-                    score_data = result['component_scores'][component]
-                    st.markdown(f"""
-                        <div class="score-card">
-                            <div class="score-label">{component.title()} Score</div>
-                            <div class="score-value">{score_data['score']:.1f}%</div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    st.markdown("#### Analysis")
-                    st.markdown(f"""
-                        <div class="explanation">
-                            {score_data['details']['explanation']}
-                        </div>
-                    """, unsafe_allow_html=True)
-            
-            # Second row
-            for i, component in enumerate(components['row2']):
-                with row2_cols[i]:
-                    score_data = result['component_scores'][component]
-                    st.markdown(f"""
-                        <div class="score-card">
-                            <div class="score-label">{component.title()} Score</div>
-                            <div class="score-value">{score_data['score']:.1f}%</div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    st.markdown("#### Analysis")
-                    st.markdown(f"""
-                        <div class="explanation">
-                            {score_data['details']['explanation']}
-                        </div>
-                    """, unsafe_allow_html=True)
+def cleanup_temp_files():
+    """Clean up temporary files when session ends"""
+    if hasattr(st.session_state, 'temp_dir'):
+        shutil.rmtree(st.session_state.temp_dir)
 
 def main():
-
-
-    st.markdown(custom_css, unsafe_allow_html=True)
-    
+    # Load custom CSS
+    st.markdown(load_custom_css(), unsafe_allow_html=True)
 
     # Initialize session state
     if 'temp_dir' not in st.session_state:
@@ -372,6 +75,7 @@ def main():
 
     # Sidebar
     with st.sidebar:
+        st.title("⚙️ Configuration")
 
         # Model Selection
         st.subheader("🤖 Model Selection")
@@ -405,160 +109,17 @@ def main():
         """.format(pricing['input'], pricing['output']), unsafe_allow_html=True)
         
         st.markdown("---")
-            # Initialize analysis agent
-        try:
-            analysis_agent = initialize_agent(model_id=selected_model_id)
-        except Exception as e:
-            st.error(f"Error initializing analysis agent: {str(e)}")
-            return
 
-        # Add this after the model selection section in main() function, before the file management section
+        # Weight controls
+        weights_valid = display_weight_controls()
 
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("📊 Analysis Weights Configuration")
+        st.markdown("---")
 
-        # Initialize weights in session state if not present
-        if 'analysis_weights' not in st.session_state:
-            st.session_state.analysis_weights = {
-                "education": 0.15,
-                "skills": 0.20,
-                "experience": 0.20,
-                "tools": 0.15,
-                "industry": 0.10,
-                "role": 0.15,
-                "preferences": 0.05
-            }
-
-        # Create columns for weight adjustment
-        st.sidebar.markdown("""
-            <style>
-                .weight-info {
-                    padding: 10px;
-                    background-color: #f0f2f6;
-                    border-radius: 5px;
-                    margin-bottom: 10px;
-                }
-                .weight-total {
-                    font-weight: bold;
-                    padding: 10px;
-                    border-radius: 5px;
-                    margin-top: 10px;
-                }
-            </style>
-        """, unsafe_allow_html=True)
-
-        st.sidebar.markdown("""
-            <div class="weight-info">
-                Adjust the weights for each component. The total must equal 1.0
-            </div>
-        """, unsafe_allow_html=True)
-
-        # Create weight sliders
-        new_weights = {}
-        total_weight = 0.0
-
-        for component, current_weight in st.session_state.analysis_weights.items():
-            # Format weight to 2 decimal places for display
-            formatted_weight = "{:.2f}".format(current_weight)
-            
-            # Create a number input for each component
-            new_weight = st.sidebar.number_input(
-                f"{component.title()} Weight",
-                min_value=0.0,
-                max_value=1.0,
-                value=float(formatted_weight),
-                step=0.05,
-                key=f"weight_{component}",
-                help=f"Current weight for {component} analysis"
-            )
-            
-            new_weights[component] = new_weight
-            total_weight += new_weight
-
-        # Display total weight and validation
-        total_formatted = "{:.2f}".format(total_weight)
-        if abs(total_weight - 1.0) < 0.0001:
-            st.sidebar.markdown(
-                f"""<div class="weight-total" style="background-color: #d1fae5; color: #065f46">
-                    Total Weight: {total_formatted} ✓
-                </div>""", 
-                unsafe_allow_html=True
-            )
-            # Update session state weights if valid
-            st.session_state.analysis_weights = new_weights
-        else:
-            st.sidebar.markdown(
-                f"""<div class="weight-total" style="background-color: #fee2e2; color: #991b1b">
-                    Total Weight: {total_formatted} ✗<br>
-                    <small>Total must equal 1.0</small>
-                </div>""", 
-                unsafe_allow_html=True
-            )
-
-        # Add reset button
-        if st.sidebar.button("Reset to Default Weights"):
-            st.session_state.analysis_weights = {
-                "education": 0.15,
-                "skills": 0.20,
-                "experience": 0.20,
-                "tools": 0.15,
-                "industry": 0.10,
-                "role": 0.15,
-                "preferences": 0.05
-            }
-            st.rerun()
-
-        # Add custom CSS for weight input styling
-        st.markdown("""
-            <style>
-                /* Style for number inputs */
-                .stNumberInput {
-                    margin-bottom: 10px;
-                }
-                .stNumberInput > div > div > input {
-                    border-radius: 4px;
-                }
-                /* Style for weight labels */
-                .stNumberInput label {
-                    color: #374151;
-                    font-size: 0.9em;
-                }
-            </style>
-        """, unsafe_allow_html=True)
-        
-
+        # File Management
         st.title("📁 File Management")
+        handle_file_upload()
         
-        # Job Posting Upload
-        st.subheader("Upload Job Description")
-        jd_file = st.file_uploader("Choose a job description file", 
-                                  type=['pdf', 'docx', 'txt'],
-                                  key="jd_uploader")
-        
-        if jd_file is not None:
-            # Clear existing job postings
-            jd_dir = os.path.join(st.session_state.temp_dir, 'job_posting')
-            for file in os.listdir(jd_dir):
-                os.remove(os.path.join(jd_dir, file))
-            
-            # Save new job posting
-            save_uploaded_file(jd_file, jd_dir)
-            st.success(f"Job Description uploaded: {jd_file.name}")
-        
-        # Resume Upload
-        st.subheader("Upload Resumes")
-        resume_files = st.file_uploader("Choose resume files", 
-                                      type=['pdf', 'docx'],
-                                      accept_multiple_files=True,
-                                      key="resume_uploader")
-        
-        if resume_files:
-            resume_dir = os.path.join(st.session_state.temp_dir, 'resumes')
-            for resume in resume_files:
-                save_uploaded_file(resume, resume_dir)
-            st.success(f"Uploaded {len(resume_files)} resume(s)")
-        
-        # Display file structure with download buttons
+        # Display file structure
         st.subheader("Current Files")
         display_file_tree()
         
@@ -575,6 +136,13 @@ def main():
     st.title("📊 Resume Analysis System")
     st.markdown("---")
 
+    # Initialize analysis agent
+    try:
+        analysis_agent = initialize_agent(model_id=selected_model_id)
+    except Exception as e:
+        st.error(f"Error initializing analysis agent: {str(e)}")
+        return
+
     # Check if files are uploaded
     jd_path = os.path.join(st.session_state.temp_dir, 'job_posting')
     resume_path = os.path.join(st.session_state.temp_dir, 'resumes')
@@ -587,11 +155,20 @@ def main():
         st.warning("Please upload some resumes to analyze.")
         return
 
+    # Create columns for analyze and clear buttons
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        analyze_clicked = st.button("🔍 Analyze Resumes", type="primary")
+    with col2:
+        clear_analysis = st.button("🔄 Run New Analysis", type="secondary")
 
-    if st.button("🔍 Analyze Resumes", type="primary"):
+    if clear_analysis:
+        st.session_state.analyzed_results = None
+        st.rerun()
+
+    if analyze_clicked:
         try:
-            # Check if weights are valid before proceeding
-            if abs(sum(st.session_state.analysis_weights.values()) - 1.0) > 0.0001:
+            if not weights_valid:
                 st.error("Please ensure weights total exactly 1.0 before analyzing")
                 return
 
@@ -634,61 +211,54 @@ def main():
             progress_text.empty()
             progress_bar.empty()
 
-            # Sort results by total score
+            # Sort results and store in session state
             analyzed_results.sort(key=lambda x: x['total_score'], reverse=True)
-
-            # Display results
-            if analyzed_results:
-                st.markdown("## 📊 Analysis Results")
-                
-                # Display token usage if available
-                if 'token_usage' in analyzed_results[0]:
-                    st.markdown("""
-                        <div class="token-info">
-                            <h4>💰 Token Usage</h4>
-                            <div>Input Tokens: {:,}</div>
-                            <div>Output Tokens: {:,}</div>
-                        </div>
-                    """.format(
-                        analyzed_results[0]['token_usage']['input_tokens'],
-                        analyzed_results[0]['token_usage']['output_tokens']
-                    ), unsafe_allow_html=True)
-                
-                # Create and display summary table
-                summary_df = create_summary_table(analyzed_results)
-                st.dataframe(
-                    summary_df,
-                    hide_index=True,
-                    use_container_width=True
-                )
-                
-                # Add download button for summary
-                st.download_button(
-                    "📥 Download Analysis Summary",
-                    summary_df.to_csv(index=False).encode('utf-8'),
-                    "resume_analysis_summary.csv",
-                    "text/csv",
-                    key="download_summary"
-                )
-                
-                # Display detailed results
-                st.markdown("## 📑 Detailed Analysis")
-                display_detailed_results(analyzed_results)
-            
-            else:
-                st.warning("No resumes could be analyzed. Please check the file formats and contents.")
+            st.session_state.analyzed_results = analyzed_results
 
         except Exception as e:
             st.error(f"An error occurred during analysis: {str(e)}")
             raise
 
-# Handle file cleanup when the session ends
-def cleanup_temp_files():
-    if hasattr(st.session_state, 'temp_dir'):
-        shutil.rmtree(st.session_state.temp_dir)
+    # Display results if available in session state
+    if hasattr(st.session_state, 'analyzed_results') and st.session_state.analyzed_results:
+        analyzed_results = st.session_state.analyzed_results
+        
+        # Display token usage
+        if 'token_usage' in analyzed_results[0]:
+            st.markdown("""
+                <div class="token-info">
+                    <h4>💰 Token Usage</h4>
+                    <div>Input Tokens: {:,}</div>
+                    <div>Output Tokens: {:,}</div>
+                </div>
+            """.format(
+                analyzed_results[0]['token_usage']['input_tokens'],
+                analyzed_results[0]['token_usage']['output_tokens']
+            ), unsafe_allow_html=True)
+        
+        # Display summary table
+        st.markdown("## 📊 Analysis Results")
+        summary_df = create_summary_table(analyzed_results)
+        st.dataframe(
+            summary_df,
+            hide_index=True,
+            use_container_width=True
+        )
+        
+        # Add download button for summary
+        st.download_button(
+            "📥 Download Analysis Summary",
+            summary_df.to_csv(index=False).encode('utf-8'),
+            "resume_analysis_summary.csv",
+            "text/csv",
+            key="download_summary"
+        )
+        
+        # Display detailed results
+        st.markdown("## 📑 Detailed Analysis")
+        display_detailed_results(analyzed_results)
 
 # Register cleanup function
-import atexit
 atexit.register(cleanup_temp_files)
 
 if __name__ == "__main__":
