@@ -133,7 +133,7 @@ class ResumeState(TypedDict):
     final_analysis: dict
     weights: Dict[str, float]
 
-class ResumeAnalysisAgent:
+class SequentialResumeAnalysisAgent:
     def __init__(self, model_id: Optional[str] = None):
         """Initialize agent with specified model or default model"""
         self.model_manager = ModelManager()
@@ -153,15 +153,19 @@ class ResumeAnalysisAgent:
         self.workflow.add_node("analyze_preferences", self.analyze_preferences)
         self.workflow.add_node("aggregate_results", self.aggregate_results)
 
-        # Set up parallel execution paths
-        for node in ["analyze_education", "analyze_skills", "analyze_experience",
-                    "analyze_tools", "analyze_industry", "analyze_role",
-                    "analyze_preferences"]:
-            self.workflow.add_edge(START, node)
-            self.workflow.add_edge(node, "aggregate_results")
-
-        # Connect aggregator to end
+        # Set up sequential execution paths
+        self.workflow.add_edge(START, "analyze_education")
+        self.workflow.add_edge("analyze_education", "analyze_skills")
+        self.workflow.add_edge("analyze_skills", "analyze_experience")
+        self.workflow.add_edge("analyze_experience", "analyze_tools")
+        self.workflow.add_edge("analyze_tools", "analyze_industry")
+        self.workflow.add_edge("analyze_industry", "analyze_role")
+        self.workflow.add_edge("analyze_role", "analyze_preferences")
+        self.workflow.add_edge("analyze_preferences", "aggregate_results")
         self.workflow.add_edge("aggregate_results", END)
+        
+        # Compile workflow
+        self.app = self.workflow.compile()
 
         # Compile workflow
         self.app = self.workflow.compile()

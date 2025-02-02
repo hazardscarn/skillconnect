@@ -6,9 +6,11 @@ import pandas as pd
 import tempfile
 from datetime import datetime
 from resume_analysis_agent import ResumeAnalysisAgent
+from sequential_resume_analysis_agent import SequentialResumeAnalysisAgent
 import PyPDF2
 import docx2txt
 from model_manager import ModelManager
+from typing import Optional
 
 # Set up the main page
 st.set_page_config(
@@ -199,9 +201,18 @@ def read_file_content(file_path):
         return None
 
 @st.cache_resource
-def initialize_agent():
+def initialize_agent(model_id: Optional[str] = None):
     """Initialize and cache the analysis agent"""
-    return ResumeAnalysisAgent()
+    model_manager = ModelManager()
+    if model_id is None:
+        model_id = model_manager.get_default_model_id()
+    
+    model_config = model_manager.models_config[model_id]
+    return ResumeAnalysisAgent(model_id)
+    if model_config['provider'] == 'openai':
+        return SequentialResumeAnalysisAgent(model_id)
+    else:
+        return ResumeAnalysisAgent(model_id)
 
 def save_uploaded_file(uploaded_file, directory):
     """Save uploaded file to specified directory"""
@@ -396,11 +407,125 @@ def main():
         st.markdown("---")
             # Initialize analysis agent
         try:
-            analysis_agent = ResumeAnalysisAgent(model_id=selected_model_id)
+            analysis_agent = initialize_agent(model_id=selected_model_id)
         except Exception as e:
             st.error(f"Error initializing analysis agent: {str(e)}")
             return
 
+        # Add this after the model selection section in main() function, before the file management section
+
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("📊 Analysis Weights Configuration")
+
+        # Initialize weights in session state if not present
+        if 'analysis_weights' not in st.session_state:
+            st.session_state.analysis_weights = {
+                "education": 0.15,
+                "skills": 0.20,
+                "experience": 0.20,
+                "tools": 0.15,
+                "industry": 0.10,
+                "role": 0.15,
+                "preferences": 0.05
+            }
+
+        # Create columns for weight adjustment
+        st.sidebar.markdown("""
+            <style>
+                .weight-info {
+                    padding: 10px;
+                    background-color: #f0f2f6;
+                    border-radius: 5px;
+                    margin-bottom: 10px;
+                }
+                .weight-total {
+                    font-weight: bold;
+                    padding: 10px;
+                    border-radius: 5px;
+                    margin-top: 10px;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+
+        st.sidebar.markdown("""
+            <div class="weight-info">
+                Adjust the weights for each component. The total must equal 1.0
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Create weight sliders
+        new_weights = {}
+        total_weight = 0.0
+
+        for component, current_weight in st.session_state.analysis_weights.items():
+            # Format weight to 2 decimal places for display
+            formatted_weight = "{:.2f}".format(current_weight)
+            
+            # Create a number input for each component
+            new_weight = st.sidebar.number_input(
+                f"{component.title()} Weight",
+                min_value=0.0,
+                max_value=1.0,
+                value=float(formatted_weight),
+                step=0.05,
+                key=f"weight_{component}",
+                help=f"Current weight for {component} analysis"
+            )
+            
+            new_weights[component] = new_weight
+            total_weight += new_weight
+
+        # Display total weight and validation
+        total_formatted = "{:.2f}".format(total_weight)
+        if abs(total_weight - 1.0) < 0.0001:
+            st.sidebar.markdown(
+                f"""<div class="weight-total" style="background-color: #d1fae5; color: #065f46">
+                    Total Weight: {total_formatted} ✓
+                </div>""", 
+                unsafe_allow_html=True
+            )
+            # Update session state weights if valid
+            st.session_state.analysis_weights = new_weights
+        else:
+            st.sidebar.markdown(
+                f"""<div class="weight-total" style="background-color: #fee2e2; color: #991b1b">
+                    Total Weight: {total_formatted} ✗<br>
+                    <small>Total must equal 1.0</small>
+                </div>""", 
+                unsafe_allow_html=True
+            )
+
+        # Add reset button
+        if st.sidebar.button("Reset to Default Weights"):
+            st.session_state.analysis_weights = {
+                "education": 0.15,
+                "skills": 0.20,
+                "experience": 0.20,
+                "tools": 0.15,
+                "industry": 0.10,
+                "role": 0.15,
+                "preferences": 0.05
+            }
+            st.rerun()
+
+        # Add custom CSS for weight input styling
+        st.markdown("""
+            <style>
+                /* Style for number inputs */
+                .stNumberInput {
+                    margin-bottom: 10px;
+                }
+                .stNumberInput > div > div > input {
+                    border-radius: 4px;
+                }
+                /* Style for weight labels */
+                .stNumberInput label {
+                    color: #374151;
+                    font-size: 0.9em;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+        
 
         st.title("📁 File Management")
         
@@ -462,11 +587,16 @@ def main():
         st.warning("Please upload some resumes to analyze.")
         return
 
-    # Add analyze button
+
     if st.button("🔍 Analyze Resumes", type="primary"):
         try:
+            # Check if weights are valid before proceeding
+            if abs(sum(st.session_state.analysis_weights.values()) - 1.0) > 0.0001:
+                st.error("Please ensure weights total exactly 1.0 before analyzing")
+                return
+
             # Read job description
-            jd_file = os.listdir(jd_path)[0]  # Get the first (and should be only) JD file
+            jd_file = os.listdir(jd_path)[0]
             job_description = read_file_content(os.path.join(jd_path, jd_file))
             
             if not job_description:
@@ -485,10 +615,11 @@ def main():
                 # Read resume content
                 resume_content = read_file_content(os.path.join(resume_path, resume_file))
                 if resume_content:
-                    # Analyze resume
+                    # Analyze resume with custom weights
                     analysis = analysis_agent.analyze_resume(
                         job_description=job_description,
-                        resume_content=resume_content
+                        resume_content=resume_content,
+                        weights=st.session_state.analysis_weights
                     )
                     
                     # Add file information
